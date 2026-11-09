@@ -1,5 +1,8 @@
 -- Offline UI/inventory harness. No game client or services are used.
 frames, timers, hooks, messages, bags, itemData = {}, {}, {}, {}, {}, {}
+bankItems, equippedItems, reagentBankItems, accountBankItems = {}, {}, {}, {}
+function time() return 1794240000 end
+function date(_, stamp) return "11/09 12:00" end
 NUM_BAG_SLOTS = 4
 Enum = {BagIndex={ReagentBag=5}}
 SlashCmdList = {}
@@ -69,6 +72,18 @@ function GetItemInfo(item)
     if data then return data.name, "|Hitem:"..id.."|h["..data.name.."]|h", 1, 1, 1, "", "", 20, "", data.icon end
 end
 C_Item = {GetItemInfo=GetItemInfo, RequestLoadItemDataByID=function(id) requestedItem = id end}
+function C_Item.GetItemCount(id, includeBank, includeUses, includeReagentBank, includeAccountBank)
+    local count = equippedItems[id] or 0
+    for bag=0,5 do
+        for _, item in ipairs(bags[bag] or {}) do
+            if item.itemID==id then count=count+item.stackCount end
+        end
+    end
+    if includeBank then count=count+(bankItems[id] or 0) end
+    if includeReagentBank then count=count+(reagentBankItems[id] or 0) end
+    if includeAccountBank then count=count+(accountBankItems[id] or 0) end
+    return count
+end
 C_Timer = {After=function(_, callback) timers[#timers+1] = callback end}
 function Tick() local queue=timers; timers={}; for _, callback in ipairs(queue) do callback() end end
 function Fire(event, ...)

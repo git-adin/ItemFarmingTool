@@ -1,7 +1,7 @@
 # ItemFarmingTool
 
 A lightweight item farming tracker for **World of Warcraft: Forever**. Pick items,
-set a goal for each, and watch your current bag totals update in a small movable box.
+set a goal for each, and watch your combined bag and personal bank totals update in a small movable box.
 No libraries or other addons are required.
 
 **[Download ItemFarmingTool.zip](https://github.com/git-adin/ItemFarmingTool/releases/latest/download/ItemFarmingTool.zip)**
@@ -26,7 +26,7 @@ saved goals and position live separately in `WTF` and are preserved.
   client does not yet know an item's name.
 - You can drop an item onto the tracker or item input to select it. With the item
   input focused, Shift-clicking an item link also fills the field.
-- Each item shows an icon, name, **current / goal**, progress bar, and the amount
+- Each item shows an icon, name, **total / goal**, progress bar, bag/bank breakdown, and the amount
   still needed. Goals turn green when reached and remain visible.
 - Click an item row to edit its goal; click its **x** to remove it. Adding an item
   already on the list updates its goal instead of creating a duplicate.
@@ -35,12 +35,20 @@ saved goals and position live separately in `WTF` and are preserved.
 - Scroll the list with the mouse wheel for more than eight items. Up to 100 items
   can be tracked, with goals from 1 to 999999.
 
-Counts are **current carried bag contents**, including a reagent bag when the
-client supports one. Equipment, bank slots, reagent bank, mail and auctions do not
-count. Looting increases progress; selling, consuming, crafting with, mailing or
-banking an item decreases it. This tracks what you have, rather than a session's
-cumulative loot. Goals, visibility, collapse state, lock state and position are
-saved per character.
+Counts combine **current carried bags and your last checked personal bank**,
+including reagent bag/bank storage when supported. Open your bank to scan tracked
+items; deposits and withdrawals update automatically while it is open. Closing
+the bank preserves the snapshot, saved per character across reloads and logouts.
+The footer shows when the bank was last checked. Equipment, guild/account banks,
+mail and auctions do not count.
+
+An item not yet checked at the bank shows **Bank ? (visit bank)**. Its total has a
+**+** to indicate a known minimum until you visit the bank. An item added away from
+the bank also needs a bank visit. Previously checked items use their cached bank
+counts while bag counts continue updating live. Selling or consuming items lowers
+the combined total; moving items between bags and bank keeps it unchanged after
+the transfer updates. This tracks what you have, rather than cumulative loot.
+Goals, visibility, collapse state, lock state and position are saved per character.
 
 | Command | Action |
 | --- | --- |
@@ -59,18 +67,18 @@ saved per character.
 
 Targets Forever's **Interface 16001**, matching QuestLite. Uses the client's
 `C_Container` bag API, with legacy global container functions as a fallback, and
-refreshes on bag and item-data events. Inventory event bursts are batched; there
+refreshes on bag, bank and item-data events. Inventory event bursts are batched; there
 is no per-frame polling, item database, network call or bundled dependency.
 
 Offline tests execute the actual addon in Lua 5.1 with an inventory/UI harness.
-They cover bag-only totals, inventory changes, async item names, commands, input
+They cover bag and bank totals, cached counts, transfers, async item names, commands, input
 validation, saved settings, progress, editing, item selection, scrolling and
 moving. They do not replace testing the appearance and interactions in Forever.
 
 Before promoting a build, check in game: add two items (one not currently owned),
 loot/sell/bank a stack, change a goal, reach it, remove an item, scroll more than
 eight items, drag/drop and Shift-click an item, lock/move/collapse/hide the box,
-then `/reload` and confirm settings persist. Use `/ift reset` to recover its position.
+then close/reopen the bank and `/reload` to confirm settings and cached bank counts persist. Use `/ift reset` to recover its position.
 
 ## Development and release
 
@@ -80,7 +88,7 @@ Python 3 is needed only for development:
 python -m pip install --target .tools -r tests/requirements.txt
 python tests/test_addon.py
 python tests/test_package.py
-python tools/package.py --tag v0.1.0
+python tools/package.py --tag v0.2.0
 ```
 
 The output contains only the installable addon folder. `dist/` and test dependencies
@@ -93,8 +101,8 @@ Follow the same release process as QuestLite: update `## Version:` in
 `.github/RELEASE_NOTES.md`. Commit and push, then tag that commit:
 
 ```powershell
-git tag v0.1.0
-git push origin v0.1.0
+git tag v0.2.0
+git push origin v0.2.0
 ```
 
 For later releases, substitute the new version. The workflow runs both test suites,

@@ -130,10 +130,10 @@ class AddonTests(unittest.TestCase):
             bags[0]={{itemID=2589,stackCount=25}}; ns.AddItem('2589',20)
             local row
             for _,f in ipairs(frames) do if f.id==2589 and f.bar then row=f end end
-            assert(row.bar.value==1 and row.count.text=='25 / 20')
+            assert(row.bar.value==1 and row.count.text=='25+ / 20')
             assert(row.detail.text=='Goal reached')
             bags[0][1].stackCount=3; Fire('BAG_UPDATE_DELAYED'); Tick()
-            assert(row.bar.value==0.15 and row.detail.text=='17 still needed')
+            assert(row.bar.value==0.15 and row.detail.text=='Up to 17 still needed')
         ''')
 
     def test_edit_goal_and_remove_pooled_rows(self):
@@ -180,7 +180,7 @@ class AddonTests(unittest.TestCase):
             local scroll
             for _,f in ipairs(frames) do if f.kind=='ScrollFrame' then scroll=f end end
             scroll.scripts.OnMouseWheel(scroll,-100)
-            assert(scroll:GetVerticalScroll()==176)
+            assert(scroll:GetVerticalScroll()==224)
             for i=1,6 do ns.RemoveItem(i) end
             assert(scroll:GetVerticalScroll()==0)
         ''')
@@ -192,6 +192,83 @@ class AddonTests(unittest.TestCase):
             Fire('BAG_UPDATE_DELAYED'); Tick(); assert(ns.counts[2589]==9)
             ns.Command('show'); assert(ns.frame:IsShown())
             for _,f in ipairs(frames) do assert(not f.scripts.OnUpdate) end
+        ''')
+
+    def test_bank_totals_exclude_equipment_and_account_storage(self):
+        self.check('''
+            bags[0]={{itemID=2589,stackCount=10}}
+            bankItems[2589]=25; equippedItems[2589]=2
+            reagentBankItems[2589]=5; accountBankItems[2589]=999
+            ns.AddItem('2589',40)
+            assert(ns.db.bankCounts[2589]==nil)
+            Fire('BANKFRAME_OPENED'); Tick()
+            assert(ns.db.bankCounts[2589]==30 and ns.counts[2589]==10)
+            local row
+            for _,f in ipairs(frames) do if f.id==2589 and f.bar then row=f end end
+            assert(row.count.text=='40 / 40' and row.detail.text=='Goal reached')
+            assert(row.storage.text=='Bags 10  |  Bank 30')
+            assert(ns.db.bankUpdatedAt==time())
+        ''')
+
+    def test_bank_deposits_and_withdrawals_survive_immediate_close(self):
+        self.check('''
+            bags[0]={{itemID=2589,stackCount=10}}; bankItems[2589]=20
+            ns.AddItem('2589',30); Fire('BANKFRAME_OPENED'); Tick()
+            bags[0][1].stackCount=5; bankItems[2589]=25
+            Fire('PLAYERBANKSLOTS_CHANGED',1)
+            Fire('BANKFRAME_CLOSED'); bankItems[2589]=0; Tick()
+            assert(ns.counts[2589]==5 and ns.db.bankCounts[2589]==25)
+            bankItems[2589]=25; Fire('BANKFRAME_OPENED'); Tick()
+            bags[0][1].stackCount=15; bankItems[2589]=15
+            Fire('BAG_UPDATE',0); Fire('BANKFRAME_CLOSED'); Tick()
+            assert(ns.counts[2589]+ns.db.bankCounts[2589]==30)
+        ''')
+
+    def test_bank_cache_persists_and_closed_bank_is_not_queried(self):
+        self.check('''
+            ns.AddItem('2589',40); bankItems[2589]=30
+            Fire('BANKFRAME_OPENED'); Tick(); Fire('BANKFRAME_CLOSED'); Tick()
+            ns.db=nil; ns.LoadSettings()
+            assert(ns.db.bankCounts[2589]==30 and ns.db.bankUpdatedAt==time())
+            C_Item.GetItemCount=function() error('Closed bank must not be queried') end
+            bags[0]={{itemID=2589,stackCount=4}}
+            Fire('BAG_UPDATE_DELAYED'); Tick()
+            assert(ns.counts[2589]==4 and ns.db.bankCounts[2589]==30)
+            ns.AddItem('2770',10); assert(ns.db.bankCounts[2770]==nil)
+        ''')
+
+    def test_new_item_at_bank_and_empty_bank_refresh(self):
+        self.check('''
+            Fire('BANKFRAME_OPENED'); Tick()
+            bankItems[2589]=12; ns.AddItem('2589',15)
+            assert(ns.db.bankCounts[2589]==12)
+            bankItems[2589]=nil; Fire('PLAYERBANKSLOTS_CHANGED',1); Tick()
+            assert(ns.db.bankCounts[2589]==0)
+            ns.RemoveItem(2589); assert(ns.db.bankCounts[2589]==nil)
+        ''')
+
+    def test_failed_bank_scan_is_unknown_and_legacy_count_supported(self):
+        self.check('''
+            ns.AddItem('2589',20); Fire('BANKFRAME_OPENED'); Tick()
+            assert(ns.db.bankCounts[2589]==0)
+            C_Item.GetItemCount=function() error('Unavailable') end
+            Fire('PLAYERBANKSLOTS_CHANGED',1); Tick()
+            assert(ns.db.bankCounts[2589]==nil)
+            GetItemCount=function(id, bank) return bank and 13 or 3 end
+            C_Item.GetItemCount=nil
+            Fire('PLAYERBANKSLOTS_CHANGED',1); Tick()
+            assert(ns.db.bankCounts[2589]==10)
+            Fire('PLAYER_ENTERING_WORLD'); Tick(); assert(not ns.bankOpen)
+        ''')
+
+    def test_corrupt_bank_cache_is_sanitized(self):
+        self.check('''
+            ns.db=nil
+            ItemFarmingToolDB={items={{id=2589,goal=20},{id=2770,goal=10}},
+                bankCounts={[2589]=-1,[2770]=0,[999]=100},bankUpdatedAt=math.huge}
+            ns.LoadSettings()
+            assert(ns.db.bankCounts[2589]==nil and ns.db.bankCounts[2770]==0)
+            assert(ns.db.bankCounts[999]==nil and ns.db.bankUpdatedAt==nil)
         ''')
 
 

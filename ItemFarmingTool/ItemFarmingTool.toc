@@ -1,9 +1,9 @@
 ## Interface: 16001
 ## Title: ItemFarmingTool
 ## Category: Inventory
-## Notes: A compact, bag-only item farming tracker for WoW Forever.
+## Notes: A compact item farming tracker with bags and cached bank counts for WoW Forever.
 ## Author: git-adin
-## Version: 0.1.0
+## Version: 0.2.0
 ## SavedVariablesPerCharacter: ItemFarmingToolDB
 ## X-License: GPL-3.0-or-later
 

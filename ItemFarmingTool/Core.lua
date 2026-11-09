@@ -31,6 +31,17 @@ function ns.LoadSettings()
         end
     end
     ns.db.items = clean
+    local bank = {}
+    if type(ns.db.bankCounts) == "table" then
+        for id in pairs(seen) do
+            local count = ns.db.bankCounts[id]
+            if type(count) == "number" and count >= 0 and count <= 2147483647 and count % 1 == 0 then
+                bank[id] = count
+            end
+        end
+    end
+    ns.db.bankCounts = bank
+    if not integer(ns.db.bankUpdatedAt, 32503680000) then ns.db.bankUpdatedAt = nil end
     ns.db.hidden = ns.db.hidden == true
     ns.db.locked = ns.db.locked == true
     ns.db.collapsed = ns.db.collapsed == true
@@ -85,11 +96,15 @@ end
 
 function ns.RemoveItem(id)
     local _, index = ns.Find(id)
-    if index then table.remove(ns.db.items, index); ns.Refresh() end
+    if index then
+        table.remove(ns.db.items, index)
+        ns.db.bankCounts[id] = nil
+        ns.Refresh()
+    end
 end
 
 -- Scan only actual carried bag slots. GetItemCount can include equipped items;
--- bank, reagent bank, mail, auctions and equipment must not affect these goals.
+-- bank storage is counted separately so equipment never inflates the goals.
 function ns.CountBags()
     local counts = {}
     local slots = C_Container and C_Container.GetContainerNumSlots or GetContainerNumSlots
@@ -116,8 +131,32 @@ function ns.CountBags()
     return counts
 end
 
+function ns.UpdateBank()
+    if not ns.bankOpen then return end
+    local get = C_Item and C_Item.GetItemCount or GetItemCount
+    if not get then return end
+    local updated = false
+    for _, entry in ipairs(ns.db.items) do
+        -- Both calls include equipment, so subtracting cancels it out. Request
+        -- personal/reagent bank storage only; account/guild banks are excluded.
+        local okTotal, total = pcall(get, entry.id, true, false, true, false)
+        local okCarried, carried = pcall(get, entry.id, false, false, false, false)
+        if okTotal and okCarried and type(total) == "number" and type(carried) == "number"
+            and total >= carried and total <= 2147483647 and carried >= 0
+            and total % 1 == 0 and carried % 1 == 0 then
+            ns.db.bankCounts[entry.id] = total - carried
+            updated = true
+        else
+            -- A failed scan must not present an older value as freshly checked.
+            ns.db.bankCounts[entry.id] = nil
+        end
+    end
+    if updated then ns.db.bankUpdatedAt = time() end
+end
+
 function ns.Refresh()
     ns.counts = ns.CountBags()
+    ns.UpdateBank()
     if ns.Render then ns.Render() end
 end
 
@@ -169,11 +208,20 @@ events:SetScript("OnEvent", function(self, event, name)
         ns.CreateUI()
         SlashCmdList.ITEMFARMINGTOOL = ns.Command
         SLASH_ITEMFARMINGTOOL1, SLASH_ITEMFARMINGTOOL2 = "/ift", "/itemfarmingtool"
-        for _, e in ipairs({"BAG_UPDATE", "BAG_UPDATE_DELAYED", "PLAYER_ENTERING_WORLD", "GET_ITEM_INFO_RECEIVED"}) do
+        for _, e in ipairs({"BAG_UPDATE", "BAG_UPDATE_DELAYED", "PLAYER_ENTERING_WORLD", "GET_ITEM_INFO_RECEIVED",
+            "BANKFRAME_OPENED", "BANKFRAME_CLOSED", "PLAYERBANKSLOTS_CHANGED"}) do
             self:RegisterEvent(e)
         end
         ns.Refresh()
     elseif ns.db then
+        if event == "BANKFRAME_OPENED" then
+            ns.bankOpen = true
+        elseif event == "BANKFRAME_CLOSED" or event == "PLAYER_ENTERING_WORLD" then
+            ns.bankOpen = false
+        end
+        -- Capture inventory changes immediately while bank data is accessible,
+        -- even when the bank closes before the batched visual update runs.
+        if ns.bankOpen then ns.UpdateBank() end
         if event ~= "GET_ITEM_INFO_RECEIVED" or ns.Find(name) then ns.RequestRefresh() end
     end
 end)
