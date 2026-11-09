@@ -1,4 +1,4 @@
-# ItemFarmingTool 0.2.1
+# ItemFarmingTool 0.2.2
 
 A compact, dependency-free item farming tracker for WoW Forever (Interface 16001).
 
@@ -27,7 +27,9 @@ account banks, mail and auctions are excluded.
 unknown. Visit the bank after adding an item to check it. Cached bank counts stay
 visible away from the bank while bag counts update live. Selling or consuming
 items reduces progress; transfers between bags and bank preserve the total.
-Reached goals turn green. Track up to 100 items with goals from 1 to 999999.
+Reached goals turn green. A brief gold spark twinkles at the bar tip when progress
+crosses the goal. Refreshes, reloads, goal edits and mode switches do not replay
+it; falling below the goal rearms the effect. Track up to 100 items with goals from 1 to 999999.
 
 Commands: `/ift add <ID, link or cached exact name> <goal>`, `/ift remove <item>`,
 `/ift show`, `/ift hide`, `/ift lock`, `/ift unlock`, `/ift reset`, `/ift help`.

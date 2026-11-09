@@ -312,6 +312,71 @@ class AddonTests(unittest.TestCase):
             ns.db.collapsed=false; ns.Render(); assert(ns.modeButton:IsShown())
         ''')
 
+    def test_completion_spark_plays_once_on_crossing_and_finishes(self):
+        self.check('''
+            bags[0]={{itemID=2589,stackCount=19}}; ns.AddItem('2589',20)
+            local row
+            for _,f in ipairs(frames) do if f.id==2589 and f.bar then row=f end end
+            assert(not row.sparkAnimation)
+            bags[0][1].stackCount=20; Fire('BAG_UPDATE_DELAYED'); Tick()
+            assert(row.sparkAnimation.plays==1 and row.spark:IsShown())
+            assert(row.sparkAnimation.animations[1].Duration==0.08)
+            assert(row.sparkAnimation.animations[2].Duration==0.55)
+            ns.Render(); ns.Refresh(); Fire('BAG_UPDATE_DELAYED'); Tick()
+            assert(row.sparkAnimation.plays==1)
+            row.sparkAnimation:Finish(); assert(not row.spark:IsShown())
+            bags[0][1].stackCount=10; ns.Refresh()
+            bags[0][1].stackCount=21; ns.Refresh()
+            assert(row.sparkAnimation.plays==2)
+        ''')
+
+    def test_spark_does_not_replay_for_existing_complete_goals_or_config_edits(self):
+        self.check('''
+            bags[0]={{itemID=2589,stackCount=20}}; ns.AddItem('2589',20)
+            local row
+            for _,f in ipairs(frames) do if f.id==2589 and f.bar then row=f end end
+            assert(not row.sparkAnimation)
+            ns.Render(); ns.modeButton.scripts.OnClick(ns.modeButton)
+            ns.modeButton.scripts.OnClick(ns.modeButton)
+            ns.AddItem('2589',10); assert(not row.sparkAnimation)
+            ns.AddItem('2589',30); assert(not row.sparkAnimation)
+            bags[0][1].stackCount=30; ns.Refresh()
+            assert(row.sparkAnimation.plays==1)
+            ns.Command('hide'); assert(not row.spark:IsShown())
+            ns.Command('show'); assert(row.sparkAnimation.plays==1)
+        ''')
+
+    def test_hidden_and_collapsed_completions_do_not_queue_sparks(self):
+        self.check('''
+            bags[0]={{itemID=2589,stackCount=1}}; ns.AddItem('2589',20)
+            local row
+            for _,f in ipairs(frames) do if f.id==2589 and f.bar then row=f end end
+            ns.Command('hide'); bags[0][1].stackCount=20; ns.Refresh()
+            ns.Command('show'); assert(not row.sparkAnimation)
+            bags[0][1].stackCount=1; ns.Refresh()
+            ns.db.collapsed=true; ns.Render()
+            bags[0][1].stackCount=20; ns.Refresh()
+            ns.db.collapsed=false; ns.Render(); assert(not row.sparkAnimation)
+        ''')
+
+    def test_bank_completion_and_row_reuse_keep_sparks_with_correct_item(self):
+        self.check('''
+            ns.AddItem('2589',20); ns.AddItem('2770',10)
+            local first,second
+            for _,f in ipairs(frames) do
+                if f.bar and f.id==2589 then first=f end
+                if f.bar and f.id==2770 then second=f end
+            end
+            bankItems[2589]=20; Fire('BANKFRAME_OPENED'); Tick()
+            assert(first.sparkAnimation.plays==1 and not second.sparkAnimation)
+            ns.RemoveItem(2589)
+            assert(first.id==2770 and not first.spark:IsShown())
+            assert(first.sparkAnimation.plays==1)
+            bankItems[2770]=10; Fire('PLAYERBANKSLOTS_CHANGED',1); Tick()
+            assert(first.sparkAnimation.plays==2 and first.spark:IsShown())
+            assert(not second:IsShown())
+        ''')
+
 
 if __name__ == '__main__':
     unittest.main()

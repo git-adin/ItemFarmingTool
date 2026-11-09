@@ -29,7 +29,9 @@ saved goals and position live separately in `WTF` and are preserved.
 - Click the footer **Bags + bank / Bags only** button to choose what counts toward
   your goals. The choice is saved per character; existing settings keep Bags + bank.
 - Each item shows an icon, name, **total / goal**, progress bar, bag/bank breakdown, and the amount
-  still needed. Goals turn green when reached and remain visible.
+  still needed. Goals turn green when reached and remain visible. A small gold
+  spark twinkles at the bar tip when an item crosses its goal. It does not replay
+  on refresh, reload, goal edits or mode switches; falling below the goal rearms it.
 - Click an item row to edit its goal; click its **x** to remove it. Adding an item
   already on the list updates its goal instead of creating a duplicate.
 - Drag the background/title to move the box. **Lock** prevents dragging; **Unlock**
@@ -93,7 +95,7 @@ Python 3 is needed only for development:
 python -m pip install --target .tools -r tests/requirements.txt
 python tests/test_addon.py
 python tests/test_package.py
-python tools/package.py --tag v0.2.1
+python tools/package.py --tag v0.2.2
 ```
 
 The output contains only the installable addon folder. `dist/` and test dependencies
@@ -106,8 +108,8 @@ Follow the same release process as QuestLite: update `## Version:` in
 `.github/RELEASE_NOTES.md`. Commit and push, then tag that commit:
 
 ```powershell
-git tag v0.2.1
-git push origin v0.2.1
+git tag v0.2.2
+git push origin v0.2.2
 ```
 
 For later releases, substitute the new version. The workflow runs both test suites,

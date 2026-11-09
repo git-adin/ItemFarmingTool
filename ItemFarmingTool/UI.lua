@@ -2,6 +2,7 @@
 local _, ns = ...
 local WIDTH, ROW_HEIGHT, VISIBLE_ROWS = 340, 56, 8
 local rows = {}
+local completion = {}
 local frame, editor, scroll, content, itemInput, goalInput, errorText, empty, summary, bankStatus, modeButton, collapse, lock
 
 local function label(parent, text, size)
@@ -61,6 +62,39 @@ local function receiveItem()
     ClearCursor()
 end
 
+local function stopSpark(row)
+    if row.sparkAnimation then row.sparkAnimation:Stop(); row.spark:Hide() end
+end
+
+local function playSpark(row)
+    if not row.spark then
+        -- A small native texture and animation group; no timers or per-frame Lua.
+        local spark = row.bar:CreateTexture(nil, "OVERLAY")
+        spark:SetTexture("Interface\\Cooldown\\star4")
+        spark:SetSize(26, 26)
+        spark:SetPoint("CENTER", row.bar, "RIGHT", -3, 0)
+        spark:SetBlendMode("ADD")
+        spark:SetVertexColor(1, 0.85, 0.35)
+        local animation = spark:CreateAnimationGroup()
+        local brighten = animation:CreateAnimation("Alpha")
+        brighten:SetFromAlpha(0)
+        brighten:SetToAlpha(1)
+        brighten:SetDuration(0.08)
+        brighten:SetOrder(1)
+        local fade = animation:CreateAnimation("Alpha")
+        fade:SetFromAlpha(1)
+        fade:SetToAlpha(0)
+        fade:SetDuration(0.55)
+        fade:SetOrder(2)
+        animation:SetScript("OnFinished", function() spark:Hide() end)
+        animation:SetScript("OnStop", function() spark:Hide() end)
+        row.spark, row.sparkAnimation = spark, animation
+    end
+    row.sparkAnimation:Stop()
+    row.spark:Show()
+    row.sparkAnimation:Play()
+end
+
 local function makeRow(index)
     local row = CreateFrame("Button", nil, content)
     row:SetSize(302, ROW_HEIGHT - 2)
@@ -100,6 +134,7 @@ local function makeRow(index)
         GameTooltip:Show()
     end)
     row:SetScript("OnLeave", function() GameTooltip:Hide() end)
+    row:SetScript("OnHide", function() stopSpark(row) end)
     return row
 end
 
@@ -107,9 +142,12 @@ function ns.Render()
     if not frame then return end
     local total, complete = #ns.db.items, 0
     local includeBank = ns.db.includeBank
+    local nextCompletion = {}
+    local visible = not ns.db.hidden and not ns.db.collapsed
     for index, entry in ipairs(ns.db.items) do
         local row = rows[index]
         if not row then row = makeRow(index); rows[index] = row end
+        if row.id ~= entry.id then stopSpark(row) end
         row.id = entry.id
         local name, _, _, _, _, _, _, _, _, icon = ns.ItemInfo(entry.id)
         local bag = ns.counts and ns.counts[entry.id] or 0
@@ -117,6 +155,13 @@ function ns.Render()
         local unknownBank = includeBank and ns.db.bankCounts[entry.id] == nil
         local count = bag + (bank or 0)
         local done = count >= entry.goal
+        -- Seed a baseline on load or configuration changes. Celebrate only
+        -- an inventory transition, never an already-complete target on redraw.
+        local previous = completion[entry.id]
+        local sameGoal = previous and previous.goal == entry.goal and previous.includeBank == includeBank
+        local justReached = sameGoal and not previous.done and done
+        nextCompletion[entry.id] = {goal=entry.goal, includeBank=includeBank, done=done}
+        if not visible or not sameGoal or not done then stopSpark(row) end
         if done then complete = complete + 1 end
         row.icon:SetTexture(icon or "Interface\\Icons\\INV_Misc_QuestionMark")
         row.name:SetText(name or ("Item #" .. entry.id))
@@ -127,7 +172,9 @@ function ns.Render()
         row.detail:SetText(done and "Goal reached" or ((unknownBank and "Up to " or "") .. (entry.goal - count) .. " still needed"))
         row.storage:SetText("Bags " .. bag .. (includeBank and ("  |  Bank " .. (unknownBank and "? (visit bank)" or bank)) or ""))
         row:Show()
+        if justReached and visible then playSpark(row) end
     end
+    completion = nextCompletion
     for index = total + 1, #rows do rows[index]:Hide() end
     summary:SetText(complete .. " / " .. total .. " goals")
     modeButton:SetText(includeBank and "Bags + bank" or "Bags only")

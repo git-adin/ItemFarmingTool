@@ -39,6 +39,8 @@ function methods:SetStatusBarColor(...) self.barColor = {...} end
 function methods:SetValue(value) self.value = value end
 function methods:SetMinMaxValues(...) self.range = {...} end
 function methods:SetTexture(value) self.texture = value end
+function methods:SetBlendMode(value) self.blendMode = value end
+function methods:SetVertexColor(...) self.vertexColor = {...} end
 function methods:SetTextColor(...) self.textColor = {...} end
 function methods:SetClampedToScreen(value) self.clamped = value end
 function methods:StartMoving() self.moving = true end
@@ -57,6 +59,29 @@ function CreateFrame(kind, name, parent, template)
 end
 function methods:CreateFontString() return CreateFrame("FontString", nil, self) end
 function methods:CreateTexture() return CreateFrame("Texture", nil, self) end
+local animationMethods = {}
+function methods:CreateAnimationGroup()
+    return setmetatable({scripts={}, animations={}, plays=0}, {__index=animationMethods})
+end
+function animationMethods:CreateAnimation(kind)
+    local animation = {}
+    for _,key in ipairs({'FromAlpha','ToAlpha','Duration','Order'}) do
+        animation['Set'..key] = function(self,value) self[key] = value end
+    end
+    animation.kind=kind
+    self.animations[#self.animations+1] = animation
+    return animation
+end
+function animationMethods:SetScript(key,callback) self.scripts[key] = callback end
+function animationMethods:Play() self.plays=self.plays+1; self.playing=true end
+function animationMethods:Stop()
+    self.playing=false
+    if self.scripts.OnStop then self.scripts.OnStop(self) end
+end
+function animationMethods:Finish()
+    self.playing=false
+    if self.scripts.OnFinished then self.scripts.OnFinished(self) end
+end
 UIParent = CreateFrame("Frame")
 C_Container = {
     GetContainerNumSlots=function(bag) return bags[bag] and #bags[bag] or 0 end,
