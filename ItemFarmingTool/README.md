@@ -1,4 +1,4 @@
-# ItemFarmingTool 0.2.0
+# ItemFarmingTool 0.2.1
 
 A compact, dependency-free item farming tracker for WoW Forever (Interface 16001).
 
@@ -12,7 +12,12 @@ or expands the box. The header **x** hides it; `/ift` shows it again. Scroll for
 more than eight items. `/ift reset` restores the default position. Goals, position,
 visibility and lock/collapse settings persist per character.
 
-Bags and your last checked personal bank count toward goals. Open the bank to
+Click the footer **Bags + bank / Bags only** button to choose what counts toward
+goals. The choice is saved per character. Bags only uses current carried bags,
+without bank amounts or unknown-bank indicators. Bank snapshots still refresh
+during visits so switching back uses the latest check.
+
+In Bags + bank mode, bags and your last checked personal bank count toward goals. Open the bank to
 scan tracked items. Deposits and withdrawals update while it is open; the last
 counts are saved across bank closing, reloads and logouts. The footer shows the
 last check time. Reagent storage is included when supported; equipment, guild and

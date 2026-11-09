@@ -26,6 +26,8 @@ saved goals and position live separately in `WTF` and are preserved.
   client does not yet know an item's name.
 - You can drop an item onto the tracker or item input to select it. With the item
   input focused, Shift-clicking an item link also fills the field.
+- Click the footer **Bags + bank / Bags only** button to choose what counts toward
+  your goals. The choice is saved per character; existing settings keep Bags + bank.
 - Each item shows an icon, name, **total / goal**, progress bar, bag/bank breakdown, and the amount
   still needed. Goals turn green when reached and remain visible.
 - Click an item row to edit its goal; click its **x** to remove it. Adding an item
@@ -35,7 +37,7 @@ saved goals and position live separately in `WTF` and are preserved.
 - Scroll the list with the mouse wheel for more than eight items. Up to 100 items
   can be tracked, with goals from 1 to 999999.
 
-Counts combine **current carried bags and your last checked personal bank**,
+In **Bags + bank** mode, counts combine **current carried bags and your last checked personal bank**,
 including reagent bag/bank storage when supported. Open your bank to scan tracked
 items; deposits and withdrawals update automatically while it is open. Closing
 the bank preserves the snapshot, saved per character across reloads and logouts.
@@ -48,7 +50,10 @@ the bank also needs a bank visit. Previously checked items use their cached bank
 counts while bag counts continue updating live. Selling or consuming items lowers
 the combined total; moving items between bags and bank keeps it unchanged after
 the transfer updates. This tracks what you have, rather than cumulative loot.
-Goals, visibility, collapse state, lock state and position are saved per character.
+In **Bags only** mode, only current carried bags affect progress and completion;
+there are no unknown-bank indicators. Bank snapshots still refresh during bank
+visits, so switching back uses the latest check. Goals, counting mode, visibility,
+collapse state, lock state and position are saved per character.
 
 | Command | Action |
 | --- | --- |
@@ -88,7 +93,7 @@ Python 3 is needed only for development:
 python -m pip install --target .tools -r tests/requirements.txt
 python tests/test_addon.py
 python tests/test_package.py
-python tools/package.py --tag v0.2.0
+python tools/package.py --tag v0.2.1
 ```
 
 The output contains only the installable addon folder. `dist/` and test dependencies
@@ -101,8 +106,8 @@ Follow the same release process as QuestLite: update `## Version:` in
 `.github/RELEASE_NOTES.md`. Commit and push, then tag that commit:
 
 ```powershell
-git tag v0.2.0
-git push origin v0.2.0
+git tag v0.2.1
+git push origin v0.2.1
 ```
 
 For later releases, substitute the new version. The workflow runs both test suites,

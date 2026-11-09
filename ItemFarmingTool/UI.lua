@@ -2,7 +2,7 @@
 local _, ns = ...
 local WIDTH, ROW_HEIGHT, VISIBLE_ROWS = 340, 56, 8
 local rows = {}
-local frame, editor, scroll, content, itemInput, goalInput, errorText, empty, summary, bankStatus, collapse, lock
+local frame, editor, scroll, content, itemInput, goalInput, errorText, empty, summary, bankStatus, modeButton, collapse, lock
 
 local function label(parent, text, size)
     local font = parent:CreateFontString(nil, "OVERLAY", size or "GameFontHighlightSmall")
@@ -106,35 +106,39 @@ end
 function ns.Render()
     if not frame then return end
     local total, complete = #ns.db.items, 0
+    local includeBank = ns.db.includeBank
     for index, entry in ipairs(ns.db.items) do
         local row = rows[index]
         if not row then row = makeRow(index); rows[index] = row end
         row.id = entry.id
         local name, _, _, _, _, _, _, _, _, icon = ns.ItemInfo(entry.id)
         local bag = ns.counts and ns.counts[entry.id] or 0
-        local bank = ns.db.bankCounts[entry.id]
+        local bank = includeBank and ns.db.bankCounts[entry.id] or 0
+        local unknownBank = includeBank and ns.db.bankCounts[entry.id] == nil
         local count = bag + (bank or 0)
         local done = count >= entry.goal
         if done then complete = complete + 1 end
         row.icon:SetTexture(icon or "Interface\\Icons\\INV_Misc_QuestionMark")
         row.name:SetText(name or ("Item #" .. entry.id))
-        row.count:SetText(count .. (bank == nil and "+" or "") .. " / " .. entry.goal)
+        row.count:SetText(count .. (unknownBank and "+" or "") .. " / " .. entry.goal)
         row.count:SetTextColor(done and 0.4 or 1, done and 0.9 or 0.85, done and 0.65 or 0.5)
         row.bar:SetValue(math.min(count / entry.goal, 1))
         row.bar:SetStatusBarColor(done and 0.3 or 0.25, done and 0.85 or 0.65, done and 0.55 or 0.95)
-        row.detail:SetText(done and "Goal reached" or ((bank == nil and "Up to " or "") .. (entry.goal - count) .. " still needed"))
-        row.storage:SetText("Bags " .. bag .. "  |  Bank " .. (bank == nil and "? (visit bank)" or bank))
+        row.detail:SetText(done and "Goal reached" or ((unknownBank and "Up to " or "") .. (entry.goal - count) .. " still needed"))
+        row.storage:SetText("Bags " .. bag .. (includeBank and ("  |  Bank " .. (unknownBank and "? (visit bank)" or bank)) or ""))
         row:Show()
     end
     for index = total + 1, #rows do rows[index]:Hide() end
-    summary:SetText(complete .. " / " .. total .. " goals  |  Bags + bank")
-    bankStatus:SetText(ns.bankOpen and "Bank open: updating counts" or
-        (ns.db.bankUpdatedAt and ("Bank cached: " .. date("%m/%d %H:%M", ns.db.bankUpdatedAt)) or "Visit your bank to check stored items"))
+    summary:SetText(complete .. " / " .. total .. " goals")
+    modeButton:SetText(includeBank and "Bags + bank" or "Bags only")
+    bankStatus:SetText(not includeBank and "Counting carried bags only" or
+        (ns.bankOpen and "Bank open: updating counts" or
+        (ns.db.bankUpdatedAt and ("Bank cached: " .. date("%m/%d %H:%M", ns.db.bankUpdatedAt)) or "Visit your bank to check stored items")))
     collapse:SetText(ns.db.collapsed and "+" or "-")
     lock:SetText(ns.db.locked and "Unlock" or "Lock")
     if ns.db.collapsed then
         editor:Hide(); itemInput:ClearFocus(); goalInput:ClearFocus()
-        scroll:Hide(); empty:Hide(); summary:Hide(); bankStatus:Hide()
+        scroll:Hide(); empty:Hide(); summary:Hide(); bankStatus:Hide(); modeButton:Hide()
         frame:SetHeight(36)
     else
         local editorHeight = editor:IsShown() and 138 or 0
@@ -148,6 +152,7 @@ function ns.Render()
         empty:SetShown(total == 0)
         summary:Show()
         bankStatus:Show()
+        modeButton:Show()
         frame:SetHeight(40 + editorHeight + height + 42)
     end
     frame:SetShown(not ns.db.hidden)
@@ -240,6 +245,18 @@ function ns.CreateUI()
     summary = label(frame, "")
     summary:SetPoint("BOTTOMLEFT", 12, 24)
     summary:SetTextColor(0.55, 0.62, 0.67)
+    modeButton = button(frame, "", 104, function()
+        ns.db.includeBank = not ns.db.includeBank
+        ns.Render()
+    end)
+    modeButton:SetPoint("BOTTOMRIGHT", -12, 19)
+    modeButton:SetScript("OnEnter", function(self)
+        GameTooltip:SetOwner(self, "ANCHOR_LEFT")
+        GameTooltip:AddLine("Click to switch Bags only / Bags + bank.", 0.4, 0.85, 0.7)
+        GameTooltip:Show()
+    end)
+    modeButton:SetScript("OnLeave", function() GameTooltip:Hide() end)
+    ns.modeButton = modeButton
     bankStatus = label(frame, "")
     bankStatus:SetPoint("BOTTOMLEFT", 12, 9)
     bankStatus:SetTextColor(0.55, 0.62, 0.67)

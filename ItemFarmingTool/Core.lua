@@ -41,6 +41,7 @@ function ns.LoadSettings()
         end
     end
     ns.db.bankCounts = bank
+    ns.db.includeBank = ns.db.includeBank ~= false
     if not integer(ns.db.bankUpdatedAt, 32503680000) then ns.db.bankUpdatedAt = nil end
     ns.db.hidden = ns.db.hidden == true
     ns.db.locked = ns.db.locked == true

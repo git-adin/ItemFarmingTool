@@ -271,6 +271,47 @@ class AddonTests(unittest.TestCase):
             assert(ns.db.bankCounts[999]==nil and ns.db.bankUpdatedAt==nil)
         ''')
 
+    def test_counting_mode_button_updates_progress_and_preserves_bank_cache(self):
+        self.check('''
+            bags[0]={{itemID=2589,stackCount=5}}; bankItems[2589]=15
+            ns.AddItem('2589',20); Fire('BANKFRAME_OPENED'); Tick()
+            Fire('BANKFRAME_CLOSED'); Tick()
+            local row,summary,status
+            for _,f in ipairs(frames) do
+                if f.id==2589 and f.bar then row=f end
+                if f.text=='1 / 1 goals' then summary=f end
+                if f.text=='Bank cached: 11/09 12:00' then status=f end
+            end
+            assert(row.count.text=='20 / 20' and row.bar.value==1)
+            assert(ns.modeButton.text=='Bags + bank')
+            ns.modeButton.scripts.OnClick(ns.modeButton)
+            assert(not ns.db.includeBank and ns.modeButton.text=='Bags only')
+            assert(row.count.text=='5 / 20' and row.bar.value==0.25)
+            assert(row.detail.text=='15 still needed' and row.storage.text=='Bags 5')
+            assert(summary.text=='0 / 1 goals' and status.text=='Counting carried bags only')
+            assert(ns.db.bankCounts[2589]==15)
+            ns.db=nil; ns.LoadSettings(); ns.Render()
+            assert(not ns.db.includeBank and row.count.text=='5 / 20')
+            ns.modeButton.scripts.OnClick(ns.modeButton)
+            assert(ns.db.includeBank and row.count.text=='20 / 20')
+            assert(summary.text=='1 / 1 goals')
+        ''')
+
+    def test_bags_only_ignores_unknown_bank_and_keeps_cache_current(self):
+        self.check('''
+            ns.modeButton.scripts.OnClick(ns.modeButton)
+            ns.AddItem('2589',20)
+            local row
+            for _,f in ipairs(frames) do if f.id==2589 and f.bar then row=f end end
+            assert(row.count.text=='0 / 20' and row.detail.text=='20 still needed')
+            bankItems[2589]=12; Fire('BANKFRAME_OPENED'); Tick()
+            assert(ns.db.bankCounts[2589]==12 and row.count.text=='0 / 20')
+            ns.modeButton.scripts.OnClick(ns.modeButton)
+            assert(row.count.text=='12 / 20')
+            ns.db.collapsed=true; ns.Render(); assert(not ns.modeButton:IsShown())
+            ns.db.collapsed=false; ns.Render(); assert(ns.modeButton:IsShown())
+        ''')
+
 
 if __name__ == '__main__':
     unittest.main()

@@ -1,15 +1,12 @@
-## ItemFarmingTool 0.2.0
+## ItemFarmingTool 0.2.1
 
-Adds personal bank tracking for WoW Forever.
-
-- Goals now combine carried bags and personal bank items, with a bag/bank breakdown.
-- Open your bank to scan tracked items; deposits and withdrawals refresh counts.
-- Cached bank totals persist per character across bank closing, reloads and logouts.
-- The footer shows the bank scan time. Unchecked items show Bank ? and a + on the known total.
-- Equipment, guild/account banks, mail and auctions are excluded. Reagent storage is included when supported.
+- Add a footer button to switch between **Bags only** and **Bags + bank**.
+- Update totals, progress, remaining amounts and completed goals immediately when switching.
+- Save the counting mode per character. Existing characters keep Bags + bank by default.
+- Keep bank snapshots current during bank visits in either mode; hide bank indicators in Bags only mode.
 
 Download **ItemFarmingTool.zip** and extract it into `_forever_/Interface/AddOns/`.
-Use `/ift` to open the tracker, then visit your bank to initialize stored-item counts.
+Use `/ift` to show the tracker. In Bags + bank mode, visit your bank to check stored items.
 
 Validated with offline Lua 5.1 inventory/UI tests and package checks. Live Forever
 appearance and interactions still require in-game verification.
