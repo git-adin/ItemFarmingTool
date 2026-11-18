@@ -33,9 +33,9 @@ function ns.LoadSettings()
     ns.db.items = clean
     local bank = {}
     if type(ns.db.bankCounts) == "table" then
-        for id in pairs(seen) do
-            local count = ns.db.bankCounts[id]
-            if type(count) == "number" and count >= 0 and count <= 2147483647 and count % 1 == 0 then
+        for key, count in pairs(ns.db.bankCounts) do
+            local id = integer(key, 2147483647)
+            if id and type(count) == "number" and count >= 0 and count <= 2147483647 and count % 1 == 0 then
                 bank[id] = count
             end
         end
@@ -43,6 +43,7 @@ function ns.LoadSettings()
     ns.db.bankCounts = bank
     ns.db.includeBank = ns.db.includeBank ~= false
     if not integer(ns.db.bankUpdatedAt, 32503680000) then ns.db.bankUpdatedAt = nil end
+    ns.db.bankSnapshotComplete = ns.db.bankSnapshotComplete == true and ns.db.bankUpdatedAt ~= nil
     ns.db.hidden = ns.db.hidden == true
     ns.db.locked = ns.db.locked == true
     ns.db.collapsed = ns.db.collapsed == true
@@ -99,9 +100,13 @@ function ns.RemoveItem(id)
     local _, index = ns.Find(id)
     if index then
         table.remove(ns.db.items, index)
-        ns.db.bankCounts[id] = nil
         ns.Refresh()
     end
+end
+
+function ns.ClearItems()
+    ns.db.items = {}
+    ns.Refresh() -- Bank snapshots and other saved settings are independent.
 end
 
 -- Scan only actual carried bag slots. GetItemCount can include equipped items;
@@ -132,27 +137,117 @@ function ns.CountBags()
     return counts
 end
 
-function ns.UpdateBank()
-    if not ns.bankOpen then return end
-    local get = C_Item and C_Item.GetItemCount or GetItemCount
-    if not get then return end
-    local updated = false
-    for _, entry in ipairs(ns.db.items) do
-        -- Both calls include equipment, so subtracting cancels it out. Request
-        -- personal/reagent bank storage only; account/guild banks are excluded.
-        local okTotal, total = pcall(get, entry.id, true, false, true, false)
-        local okCarried, carried = pcall(get, entry.id, false, false, false, false)
-        if okTotal and okCarried and type(total) == "number" and type(carried) == "number"
-            and total >= carried and total <= 2147483647 and carried >= 0
-            and total % 1 == 0 and carried % 1 == 0 then
-            ns.db.bankCounts[entry.id] = total - carried
-            updated = true
+function ns.BankCount(id)
+    local count = ns.db.bankCounts[id]
+    if count ~= nil then return count end
+    if ns.db.bankSnapshotComplete then return 0 end
+end
+
+local function bankContainers()
+    local indices = Enum and Enum.BagIndex or {}
+    local containers, allowed = {}, {}
+    -- Forever has nine character-bank containers, not the legacy -1 bank.
+    -- Enumerate their names so account tabs and the keyring cannot be included.
+    for name, id in pairs(indices) do
+        if name:match("^CharacterBankTab_%d+$") then allowed[id] = true end
+    end
+    if next(allowed) then
+        local character = Enum.BankType and Enum.BankType.Character
+        if C_Bank and character and C_Bank.CanUseBank and not C_Bank.CanUseBank(character) then return end
+        if C_Bank and character and C_Bank.FetchPurchasedBankTabData then
+            local tabs = C_Bank.FetchPurchasedBankTabData(character)
+            if type(tabs) ~= "table" or #tabs == 0 then return end
+            local seen = {}
+            for _, tab in ipairs(tabs) do
+                if type(tab) ~= "table" or not allowed[tab.ID] or seen[tab.ID] then return end
+                containers[#containers + 1], seen[tab.ID] = tab.ID, true
+            end
         else
-            -- A failed scan must not present an older value as freshly checked.
-            ns.db.bankCounts[entry.id] = nil
+            for id in pairs(allowed) do containers[#containers + 1] = id end
+        end
+    else
+        -- Legacy clients expose the main bank plus purchased bank bag slots.
+        containers[1] = indices.Bank or BANK_CONTAINER or -1
+        for name, id in pairs(indices) do
+            if name:match("^BankBag_%d+$") then containers[#containers + 1] = id end
+        end
+        if #containers == 1 then
+            for bag = 1, (NUM_BANKBAGSLOTS or 7) do
+                containers[#containers + 1] = (NUM_BAG_SLOTS or 4) + bag
+            end
+        end
+        local reagent = indices.Reagentbank or REAGENTBANK_CONTAINER
+        if reagent then containers[#containers + 1] = reagent end
+    end
+    table.sort(containers)
+    return containers, next(allowed) and indices.CharacterBankTab_1 or (indices.Bank or BANK_CONTAINER or -1)
+end
+
+local function scanBank()
+    local containers, mainBank = bankContainers()
+    local slots = C_Container and C_Container.GetContainerNumSlots or GetContainerNumSlots
+    local info = C_Container and C_Container.GetContainerItemInfo or GetContainerItemInfo
+    local itemID = C_Container and C_Container.GetContainerItemID or GetContainerItemID
+    if not containers or not slots or not info then return end
+    local counts, totalSlots, mainReady = {}, 0, false
+    for _, bag in ipairs(containers) do
+        local size = slots(bag)
+        if type(size) ~= "number" or size < 0 or size > 1000 or size % 1 ~= 0 then return end
+        totalSlots = totalSlots + size
+        if bag == mainBank and size > 0 then mainReady = true end
+        for slot = 1, size do
+            local first, stack, _, _, _, _, link, _, _, legacyID = info(bag, slot)
+            local id
+            if type(first) == "table" then
+                id, stack = first.itemID, first.stackCount
+                if not id and first.hyperlink then id = tonumber(first.hyperlink:match("item:(%d+)")) end
+            else
+                id = legacyID or (link and tonumber(link:match("item:(%d+)")))
+            end
+            local knownID = itemID and itemID(bag, slot)
+            id = id or knownID
+            -- Reject partially available occupied slots; never publish half a bank.
+            if first or knownID then
+                if not integer(id, 2147483647) or not integer(stack, 2147483647) then return end
+                counts[id] = (counts[id] or 0) + stack
+            end
         end
     end
-    if updated then ns.db.bankUpdatedAt = time() end
+    if totalSlots == 0 or not mainReady then return end -- Not loaded is different from empty.
+    return counts
+end
+
+function ns.UpdateBank()
+    if not ns.bankOpen or not ns.bankScanReady then return false end
+    local ok, counts = pcall(scanBank)
+    if not ok or not counts then
+        ns.bankScanFailed = true
+        return false -- Keep the last valid snapshot and its original timestamp.
+    end
+    ns.db.bankCounts = counts
+    ns.db.bankSnapshotComplete = true
+    ns.db.bankUpdatedAt = time()
+    ns.bankScanFailed, ns.bankScanPending = false, false
+    return true
+end
+
+function ns.BeginBankScan()
+    ns.bankGeneration = (ns.bankGeneration or 0) + 1
+    local generation, attempts = ns.bankGeneration, 0
+    ns.bankScanReady, ns.bankScanPending = false, true
+    local function scan()
+        if not ns.bankOpen or ns.bankGeneration ~= generation then return end
+        attempts = attempts + 1
+        ns.bankScanReady = true
+        local ok = ns.UpdateBank()
+        if not ok and attempts < 4 and C_Timer and C_Timer.After then
+            C_Timer.After(0.3, scan)
+        else ns.bankScanPending = false end
+        if ns.Render then ns.Render() end
+    end
+    -- BANKFRAME_OPENED can precede the container data. Wait briefly and retry
+    -- only a bounded number of times; closing/reloading cancels the callbacks.
+    if C_Timer and C_Timer.After then C_Timer.After(0.2, scan) else scan() end
 end
 
 function ns.Refresh()
@@ -210,19 +305,24 @@ events:SetScript("OnEvent", function(self, event, name)
         SlashCmdList.ITEMFARMINGTOOL = ns.Command
         SLASH_ITEMFARMINGTOOL1, SLASH_ITEMFARMINGTOOL2 = "/ift", "/itemfarmingtool"
         for _, e in ipairs({"BAG_UPDATE", "BAG_UPDATE_DELAYED", "PLAYER_ENTERING_WORLD", "GET_ITEM_INFO_RECEIVED",
-            "BANKFRAME_OPENED", "BANKFRAME_CLOSED", "PLAYERBANKSLOTS_CHANGED"}) do
+            "BANKFRAME_OPENED", "BANKFRAME_CLOSED", "PLAYERBANKSLOTS_CHANGED", "BANK_TABS_CHANGED", "PLAYER_LOGOUT"}) do
             self:RegisterEvent(e)
         end
         ns.Refresh()
     elseif ns.db then
         if event == "BANKFRAME_OPENED" then
             ns.bankOpen = true
-        elseif event == "BANKFRAME_CLOSED" or event == "PLAYER_ENTERING_WORLD" then
+            ns.BeginBankScan()
+        elseif event == "BANKFRAME_CLOSED" or event == "PLAYER_ENTERING_WORLD" or event == "PLAYER_LOGOUT" then
             ns.bankOpen = false
+            ns.bankScanReady, ns.bankScanPending = false, false
+            ns.bankGeneration = (ns.bankGeneration or 0) + 1
         end
         -- Capture inventory changes immediately while bank data is accessible,
         -- even when the bank closes before the batched visual update runs.
-        if ns.bankOpen then ns.UpdateBank() end
+        if ns.bankOpen and (event == "BAG_UPDATE" or event == "BAG_UPDATE_DELAYED"
+            or event == "PLAYERBANKSLOTS_CHANGED" or event == "BANK_TABS_CHANGED") then ns.UpdateBank() end
+        if event == "PLAYER_LOGOUT" then return end -- WoW saves the existing DB table.
         if event ~= "GET_ITEM_INFO_RECEIVED" or ns.Find(name) then ns.RequestRefresh() end
     end
 end)

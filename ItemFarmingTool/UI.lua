@@ -3,7 +3,7 @@ local _, ns = ...
 local WIDTH, ROW_HEIGHT, VISIBLE_ROWS = 340, 56, 8
 local rows = {}
 local completion = {}
-local frame, editor, scroll, content, itemInput, goalInput, errorText, empty, summary, bankStatus, modeButton, collapse, lock
+local frame, editor, scroll, content, itemInput, goalInput, errorText, empty, summary, bankStatus, modeButton, clearAll, collapse, lock
 
 local function label(parent, text, size)
     local font = parent:CreateFontString(nil, "OVERLAY", size or "GameFontHighlightSmall")
@@ -151,8 +151,9 @@ function ns.Render()
         row.id = entry.id
         local name, _, _, _, _, _, _, _, _, icon = ns.ItemInfo(entry.id)
         local bag = ns.counts and ns.counts[entry.id] or 0
-        local bank = includeBank and ns.db.bankCounts[entry.id] or 0
-        local unknownBank = includeBank and ns.db.bankCounts[entry.id] == nil
+        local cachedBank = ns.BankCount(entry.id)
+        local bank = includeBank and cachedBank or 0
+        local unknownBank = includeBank and cachedBank == nil
         local count = bag + (bank or 0)
         local done = count >= entry.goal
         -- Seed a baseline on load or configuration changes. Celebrate only
@@ -179,13 +180,15 @@ function ns.Render()
     summary:SetText(complete .. " / " .. total .. " goals")
     modeButton:SetText(includeBank and "Bags + bank" or "Bags only")
     bankStatus:SetText(not includeBank and "Counting carried bags only" or
+        (ns.bankScanPending and "Checking bank; keeping saved counts" or
+        (ns.bankOpen and ns.bankScanFailed and "Bank scan failed; saved counts kept" or
         (ns.bankOpen and "Bank open: updating counts" or
-        (ns.db.bankUpdatedAt and ("Bank cached: " .. date("%m/%d %H:%M", ns.db.bankUpdatedAt)) or "Visit your bank to check stored items")))
+        (ns.db.bankUpdatedAt and ("Bank cached: " .. date("%m/%d %H:%M", ns.db.bankUpdatedAt)) or "Visit your bank to check stored items")))))
     collapse:SetText(ns.db.collapsed and "+" or "-")
     lock:SetText(ns.db.locked and "Unlock" or "Lock")
     if ns.db.collapsed then
         editor:Hide(); itemInput:ClearFocus(); goalInput:ClearFocus()
-        scroll:Hide(); empty:Hide(); summary:Hide(); bankStatus:Hide(); modeButton:Hide()
+        scroll:Hide(); empty:Hide(); summary:Hide(); bankStatus:Hide(); modeButton:Hide(); clearAll:Hide()
         frame:SetHeight(36)
     else
         local editorHeight = editor:IsShown() and 138 or 0
@@ -200,6 +203,7 @@ function ns.Render()
         summary:Show()
         bankStatus:Show()
         modeButton:Show()
+        clearAll:SetShown(total > 0)
         frame:SetHeight(40 + editorHeight + height + 42)
     end
     frame:SetShown(not ns.db.hidden)
@@ -304,6 +308,18 @@ function ns.CreateUI()
     end)
     modeButton:SetScript("OnLeave", function() GameTooltip:Hide() end)
     ns.modeButton = modeButton
+    clearAll = button(frame, "Clear all", 64, function()
+        editor:Hide(); itemInput:ClearFocus(); goalInput:ClearFocus()
+        ns.ClearItems()
+    end)
+    clearAll:SetPoint("RIGHT", modeButton, "LEFT", -8, 0)
+    clearAll:SetScript("OnEnter", function(self)
+        GameTooltip:SetOwner(self, "ANCHOR_LEFT")
+        GameTooltip:AddLine("Remove all tracked goals. Saved bank counts are kept.", 0.4, 0.85, 0.7)
+        GameTooltip:Show()
+    end)
+    clearAll:SetScript("OnLeave", function() GameTooltip:Hide() end)
+    ns.clearAllButton = clearAll
     bankStatus = label(frame, "")
     bankStatus:SetPoint("BOTTOMLEFT", 12, 9)
     bankStatus:SetTextColor(0.55, 0.62, 0.67)

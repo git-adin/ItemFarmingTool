@@ -1,6 +1,7 @@
 """Lua 5.1 integration tests for the actual addon files and UI callbacks."""
 from pathlib import Path
 import sys
+import tempfile
 import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -12,8 +13,13 @@ from lupa.lua51 import LuaRuntime
 
 class AddonTests(unittest.TestCase):
     def setUp(self):
+        self.start_session()
+
+    def start_session(self, saved=None):
         self.lua = LuaRuntime(unpack_returned_tuples=True)
         self.lua.execute((ROOT / 'tests/wow_mock.lua').read_text())
+        if saved:
+            self.lua.execute(saved)
         self.ns = self.lua.table()
         self.lua.globals().ns = self.ns
         for name in ['Core.lua', 'UI.lua']:
@@ -22,6 +28,22 @@ class AddonTests(unittest.TestCase):
 
     def check(self, code):
         self.lua.execute(code)
+
+    def save_session(self):
+        # Exercise WoW's persisted Lua-table format, not an in-memory ns.db reset.
+        return self.lua.eval('''function()
+            local function encode(value)
+                if type(value)=='table' then
+                    local entries={}
+                    for key,item in pairs(value) do
+                        entries[#entries+1]='['..encode(key)..']='..encode(item)..','
+                    end
+                    return '{'..table.concat(entries)..'}'
+                elseif type(value)=='string' then return string.format('%q',value)
+                else return tostring(value) end
+            end
+            return 'ItemFarmingToolDB = '..encode(ItemFarmingToolDB)
+        end''')()
 
     def test_multiple_items_bag_only_and_reagent_bag(self):
         self.check('''
@@ -243,21 +265,26 @@ class AddonTests(unittest.TestCase):
             bankItems[2589]=12; ns.AddItem('2589',15)
             assert(ns.db.bankCounts[2589]==12)
             bankItems[2589]=nil; Fire('PLAYERBANKSLOTS_CHANGED',1); Tick()
-            assert(ns.db.bankCounts[2589]==0)
-            ns.RemoveItem(2589); assert(ns.db.bankCounts[2589]==nil)
+            assert(ns.BankCount(2589)==0)
+            ns.RemoveItem(2589); assert(ns.BankCount(2589)==0)
         ''')
 
-    def test_failed_bank_scan_is_unknown_and_legacy_count_supported(self):
+    def test_failed_bank_scan_preserves_cache_and_legacy_containers_supported(self):
         self.check('''
+            bankItems[2589]=12
             ns.AddItem('2589',20); Fire('BANKFRAME_OPENED'); Tick()
-            assert(ns.db.bankCounts[2589]==0)
-            C_Item.GetItemCount=function() error('Unavailable') end
+            assert(ns.BankCount(2589)==12)
+            local original=C_Container.GetContainerItemInfo
+            C_Container.GetContainerItemInfo=function() error('Unavailable') end
             Fire('PLAYERBANKSLOTS_CHANGED',1); Tick()
-            assert(ns.db.bankCounts[2589]==nil)
-            GetItemCount=function(id, bank) return bank and 13 or 3 end
-            C_Item.GetItemCount=nil
+            assert(ns.BankCount(2589)==12 and ns.bankScanFailed)
+            Enum=nil; C_Bank=nil; C_Container=nil
+            GetContainerNumSlots=function(bag) return bag==-1 and 28 or 0 end
+            GetContainerItemInfo=function(bag,slot)
+                if slot==1 then return 1,10,false,1,false,false,'|Hitem:2589|h[Linen]|h' end
+            end
             Fire('PLAYERBANKSLOTS_CHANGED',1); Tick()
-            assert(ns.db.bankCounts[2589]==10)
+            assert(ns.BankCount(2589)==10)
             Fire('PLAYER_ENTERING_WORLD'); Tick(); assert(not ns.bankOpen)
         ''')
 
@@ -268,7 +295,7 @@ class AddonTests(unittest.TestCase):
                 bankCounts={[2589]=-1,[2770]=0,[999]=100},bankUpdatedAt=math.huge}
             ns.LoadSettings()
             assert(ns.db.bankCounts[2589]==nil and ns.db.bankCounts[2770]==0)
-            assert(ns.db.bankCounts[999]==nil and ns.db.bankUpdatedAt==nil)
+            assert(ns.db.bankCounts[999]==100 and ns.db.bankUpdatedAt==nil)
         ''')
 
     def test_counting_mode_button_updates_progress_and_preserves_bank_cache(self):
@@ -375,6 +402,122 @@ class AddonTests(unittest.TestCase):
             bankItems[2770]=10; Fire('PLAYERBANKSLOTS_CHANGED',1); Tick()
             assert(first.sparkAnimation.plays==2 and first.spark:IsShown())
             assert(not second:IsShown())
+        ''')
+
+    def test_complete_bank_snapshot_survives_disk_reload_and_new_session(self):
+        self.check('''
+            bankItems[2589]=31; bankItems[2770]=12
+            -- Scan everything, even before any farming targets are configured.
+            C_Item.GetItemCount=function() return 0 end
+            Fire('BANKFRAME_OPENED'); Tick(); Fire('BANKFRAME_CLOSED'); Tick()
+            assert(ns.db.bankSnapshotComplete and ns.BankCount(2770)==12)
+            ns.AddItem('2589',40); ns.db.locked=true
+            ns.modeButton.scripts.OnClick(ns.modeButton)
+            Fire('PLAYER_LOGOUT')
+        ''')
+        with tempfile.TemporaryDirectory() as temporary:
+            saved = Path(temporary) / 'ItemFarmingTool.lua'
+            saved.write_text(self.save_session(), encoding='utf-8')
+            # A new interpreter, fresh addon files/events, and no live bank data.
+            self.start_session(saved.read_text(encoding='utf-8'))
+            self.check('''
+                assert(ns.BankCount(2589)==31 and ns.BankCount(2770)==12)
+                assert(ns.BankCount(999)==0 and ns.db.bankUpdatedAt==time())
+                assert(ns.Find(2589).goal==40 and ns.db.locked and not ns.db.includeBank)
+                ns.AddItem('2770',15); ns.RemoveItem(2589)
+                assert(ns.BankCount(2589)==31)
+                Fire('PLAYER_ENTERING_WORLD'); Tick()
+                ns.modeButton.scripts.OnClick(ns.modeButton)
+                assert(ns.db.includeBank)
+                local row
+                for _,f in ipairs(frames) do if f.id==2770 and f.bar and f:IsShown() then row=f end end
+                assert(row.count.text=='12 / 15')
+                Fire('PLAYER_LOGOUT')
+            ''')
+            saved.write_text(self.save_session(), encoding='utf-8')
+            self.start_session(saved.read_text(encoding='utf-8'))
+            self.check('''
+                ns.AddItem('2589',40)
+                assert(ns.BankCount(2589)==31 and ns.BankCount(2770)==12)
+                assert(ns.Find(2770).goal==15 and ns.db.includeBank)
+            ''')
+
+    def test_bank_open_waits_for_data_and_retries_without_erasing_saved_snapshot(self):
+        self.check('''
+            ns.db.bankCounts={[2589]=31}; ns.db.bankUpdatedAt=100
+            bags[6]={} -- Base bank has not loaded its slots yet.
+            Fire('BANKFRAME_OPENED')
+            assert(ns.BankCount(2589)==31 and ns.db.bankUpdatedAt==100)
+            Tick()
+            assert(ns.BankCount(2589)==31 and ns.db.bankUpdatedAt==100 and ns.bankScanPending)
+            bags[6]=nil; bankItems[2589]=35
+            Tick()
+            assert(ns.BankCount(2589)==35 and not ns.bankScanPending)
+            assert(ns.db.bankUpdatedAt==time())
+        ''')
+
+    def test_incomplete_bank_slots_and_inaccessible_bank_preserve_snapshot(self):
+        self.check('''
+            bankItems[2589]=31; Fire('BANKFRAME_OPENED'); Tick()
+            ns.db.bankUpdatedAt=100
+            local get=C_Container.GetContainerItemInfo
+            C_Container.GetContainerItemInfo=function(bag,slot)
+                if bag==6 and slot==1 then return {itemID=2589} end
+                return get(bag,slot)
+            end
+            Fire('PLAYERBANKSLOTS_CHANGED',1); Tick()
+            assert(ns.BankCount(2589)==31 and ns.db.bankUpdatedAt==100)
+            C_Container.GetContainerItemInfo=get; bankAccessible=false
+            bankItems[2589]=0
+            Fire('BANK_TABS_CHANGED',Enum.BankType.Character); Tick()
+            assert(ns.BankCount(2589)==31 and ns.db.bankUpdatedAt==100)
+            bankAccessible=true
+            Fire('PLAYERBANKSLOTS_CHANGED',1); Tick()
+            assert(ns.BankCount(2589)==0 and ns.db.bankUpdatedAt==time())
+        ''')
+
+    def test_forever_bank_tab_nine_is_included_and_account_tabs_excluded(self):
+        self.check('''
+            purchasedBankTabs={}
+            for i=1,9 do purchasedBankTabs[i]={ID=Enum.BagIndex['CharacterBankTab_'..i]} end
+            bags[6]={{itemID=2589,stackCount=5}}
+            bags[14]={{itemID=2589,stackCount=17},{itemID=2770,stackCount=8}}
+            bags[15]={{itemID=2589,stackCount=999}}
+            bags[-1]={{itemID=2589,stackCount=999}} -- Forever's keyring, not its bank.
+            Fire('BANKFRAME_OPENED'); Tick()
+            assert(ns.BankCount(2589)==22 and ns.BankCount(2770)==8)
+        ''')
+
+    def test_clear_all_button_preserves_snapshot_settings_and_hides_rows(self):
+        self.check('''
+            assert(not ns.clearAllButton:IsShown())
+            bankItems[2589]=31; bankItems[2770]=12
+            Fire('BANKFRAME_OPENED'); Tick(); Fire('BANKFRAME_CLOSED'); Tick()
+            ns.AddItem('2589',40); ns.AddItem('2770',15)
+            ns.db.locked=true
+            ns.db.position={point='CENTER',relativePoint='CENTER',x=15,y=25}
+            local stamp=ns.db.bankUpdatedAt
+            assert(ns.clearAllButton:IsShown())
+            ns.clearAllButton.scripts.OnClick(ns.clearAllButton)
+            assert(#ns.db.items==0 and not ns.clearAllButton:IsShown())
+            assert(ns.BankCount(2589)==31 and ns.BankCount(2770)==12)
+            assert(ns.db.bankUpdatedAt==stamp and ns.db.locked and ns.db.position.x==15)
+            for _,f in ipairs(frames) do if f.bar then assert(not f:IsShown()) end end
+            ns.AddItem('2589',40); assert(ns.BankCount(2589)==31)
+            ns.db.collapsed=true; ns.Render(); assert(not ns.clearAllButton:IsShown())
+        ''')
+
+    def test_close_cancels_bank_scan_retries_and_legacy_cache_migrates(self):
+        self.check('''
+            ns.db=nil
+            ItemFarmingToolDB={items={},bankCounts={['2589']=31,[2770]=12},bankUpdatedAt=100}
+            ns.LoadSettings()
+            assert(ns.BankCount(2589)==31 and ns.BankCount(2770)==12)
+            assert(ns.BankCount(999)==nil and not ns.db.bankSnapshotComplete)
+            bags[6]={}; Fire('BANKFRAME_OPENED'); Tick()
+            Fire('BANKFRAME_CLOSED'); bags[6]=nil; bankItems[2589]=0; Tick()
+            assert(ns.BankCount(2589)==31 and ns.db.bankUpdatedAt==100)
+            assert(#timers==0)
         ''')
 
 

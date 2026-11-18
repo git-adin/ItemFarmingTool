@@ -1,10 +1,11 @@
-# ItemFarmingTool 0.2.2
+# ItemFarmingTool 0.2.3
 
 A compact, dependency-free item farming tracker for WoW Forever (Interface 16001).
 
 Type `/ift`, click **Add**, choose an item by ID, link, cached exact name or dragging
 it from a bag, and set a goal. Each row shows combined bags + bank, a storage breakdown, goal and progress.
-Click a row to edit its goal or **x** to remove it. Focus the item field and
+Click a row to edit its goal or **x** to remove it. **Clear all** removes every
+tracked goal while preserving bank counts and settings. Focus the item field and
 Shift-click an item link to select it. Duplicate items update the existing goal.
 
 Drag the title/background to move; **Lock** prevents movement. **- / +** collapses
@@ -18,13 +19,15 @@ without bank amounts or unknown-bank indicators. Bank snapshots still refresh
 during visits so switching back uses the latest check.
 
 In Bags + bank mode, bags and your last checked personal bank count toward goals. Open the bank to
-scan tracked items. Deposits and withdrawals update while it is open; the last
+save a full snapshot, including items you are not tracking yet. Deposits and withdrawals update while it is open; the last
 counts are saved across bank closing, reloads and logouts. The footer shows the
 last check time. Reagent storage is included when supported; equipment, guild and
 account banks, mail and auctions are excluded.
 
 **Bank ? (visit bank)** and a **+** on the total mean that item's bank amount is
-unknown. Visit the bank after adding an item to check it. Cached bank counts stay
+unknown. After a full bank scan, newly added items use the saved snapshot without
+another bank visit. Removing goals never deletes bank data. Loading or failed
+scans keep the last valid snapshot and its timestamp. Cached bank counts stay
 visible away from the bank while bag counts update live. Selling or consuming
 items reduces progress; transfers between bags and bank preserve the total.
 Reached goals turn green. A brief gold spark twinkles at the bar tip when progress

@@ -5,6 +5,17 @@ function time() return 1794240000 end
 function date(_, stamp) return "11/09 12:00" end
 NUM_BAG_SLOTS = 4
 Enum = {BagIndex={ReagentBag=5}}
+Enum.BankType = {Character=0, Account=2}
+for index=1,9 do Enum.BagIndex['CharacterBankTab_'..index]=index+5 end
+Enum.BagIndex.AccountBankTab_1 = 15
+bankAccessible = true
+C_Bank = {
+    CanUseBank=function(bankType) return bankType==Enum.BankType.Character and bankAccessible end,
+    FetchPurchasedBankTabData=function(bankType)
+        assert(bankType==Enum.BankType.Character)
+        return purchasedBankTabs or {{ID=6},{ID=7}}
+    end,
+}
 SlashCmdList = {}
 local methods = {}
 function methods:SetScript(key, value) self.scripts[key] = value end
@@ -84,10 +95,22 @@ function animationMethods:Finish()
 end
 UIParent = CreateFrame("Frame")
 C_Container = {
-    GetContainerNumSlots=function(bag) return bags[bag] and #bags[bag] or 0 end,
+    GetContainerNumSlots=function(bag)
+        if bags[bag] then return #bags[bag] end
+        if bag==6 or bag==7 then return 28 end
+        return 0
+    end,
     GetContainerItemInfo=function(bag, slot)
         scans = (scans or 0) + 1
-        return bags[bag][slot]
+        if bags[bag] then return bags[bag][slot] end
+        local source = bag==6 and bankItems or (bag==7 and reagentBankItems)
+        if source then
+            local ids={}
+            for id,count in pairs(source) do if count>0 then ids[#ids+1]=id end end
+            table.sort(ids)
+            local id=ids[slot]
+            if id then return {itemID=id,stackCount=source[id]} end
+        end
     end,
 }
 function GetItemInfo(item)

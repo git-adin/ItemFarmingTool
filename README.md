@@ -32,7 +32,9 @@ saved goals and position live separately in `WTF` and are preserved.
   still needed. Goals turn green when reached and remain visible. A small gold
   spark twinkles at the bar tip when an item crosses its goal. It does not replay
   on refresh, reload, goal edits or mode switches; falling below the goal rearms it.
-- Click an item row to edit its goal; click its **x** to remove it. Adding an item
+- Click an item row to edit its goal; click its **x** to remove it. **Clear all**
+  removes every tracked goal while keeping your bank snapshot and other settings.
+  Adding an item
   already on the list updates its goal instead of creating a duplicate.
 - Drag the background/title to move the box. **Lock** prevents dragging; **Unlock**
   restores it. **- / +** collapses or expands the box. The header **x** hides it.
@@ -40,16 +42,24 @@ saved goals and position live separately in `WTF` and are preserved.
   can be tracked, with goals from 1 to 999999.
 
 In **Bags + bank** mode, counts combine **current carried bags and your last checked personal bank**,
-including reagent bag/bank storage when supported. Open your bank to scan tracked
-items; deposits and withdrawals update automatically while it is open. Closing
+including reagent bag/bank storage when supported. Open your bank to scan its
+contents, including items you are not tracking yet. Forever character-bank tabs
+are scanned directly, including all nine tabs when available; equipment, the
+keyring and account-bank containers are excluded. Deposits and withdrawals update
+automatically while it is open. Closing
 the bank preserves the snapshot, saved per character across reloads and logouts.
 The footer shows when the bank was last checked. Equipment, guild/account banks,
 mail and auctions do not count.
 
-An item not yet checked at the bank shows **Bank ? (visit bank)**. Its total has a
-**+** to indicate a known minimum until you visit the bank. An item added away from
-the bank also needs a bank visit. Previously checked items use their cached bank
-counts while bag counts continue updating live. Selling or consuming items lowers
+Before the first complete bank scan, an unchecked item shows **Bank ? (visit bank)**
+and a **+** on its known total. After a complete scan, items added later use that
+snapshot immediately, including a known zero for items absent from it. Removing
+an item or clearing the goal list does not delete bank counts. Existing caches
+from earlier versions are preserved; visit your bank once to upgrade to a full
+snapshot. Previously checked items use their saved bank counts while bags update
+live. Closed, loading or failed bank scans never clear the last valid snapshot or
+advance its timestamp. Bank opening waits briefly for data and retries unavailable
+data a bounded number of times. Selling or consuming items lowers
 the combined total; moving items between bags and bank keeps it unchanged after
 the transfer updates. This tracks what you have, rather than cumulative loot.
 In **Bags only** mode, only current carried bags affect progress and completion;
@@ -78,7 +88,8 @@ refreshes on bag, bank and item-data events. Inventory event bursts are batched;
 is no per-frame polling, item database, network call or bundled dependency.
 
 Offline tests execute the actual addon in Lua 5.1 with an inventory/UI harness.
-They cover bag and bank totals, cached counts, transfers, async item names, commands, input
+They cover bag and bank totals, saved-file reloads in fresh Lua sessions, complete
+bank snapshots, failed scans, clearing goals, transfers, async item names, commands, input
 validation, saved settings, progress, editing, item selection, scrolling and
 moving. They do not replace testing the appearance and interactions in Forever.
 
@@ -95,12 +106,12 @@ Python 3 is needed only for development:
 python -m pip install --target .tools -r tests/requirements.txt
 python tests/test_addon.py
 python tests/test_package.py
-python tools/package.py --tag v0.2.2
+python tools/package.py --tag v0.2.3
 ```
 
 The output contains only the installable addon folder. `dist/` and test dependencies
 are excluded from Git. Runtime API signatures are checked against the
-[Blizzard UI source mirror](https://github.com/Gethe/wow-ui-source/blob/live/Interface/AddOns/Blizzard_APIDocumentationGenerated/ContainerDocumentation.lua)
+[Forever bank UI source](https://github.com/Gethe/wow-ui-source/blob/70ef1b2fd78061a73f886c4a1e79dc5b5cff6d5e/Interface/AddOns/Blizzard_UIPanels_Game/Camelot/BankFrame.lua)
 and the installed Forever addons.
 
 Follow the same release process as QuestLite: update `## Version:` in
@@ -108,8 +119,8 @@ Follow the same release process as QuestLite: update `## Version:` in
 `.github/RELEASE_NOTES.md`. Commit and push, then tag that commit:
 
 ```powershell
-git tag v0.2.2
-git push origin v0.2.2
+git tag v0.2.3
+git push origin v0.2.3
 ```
 
 For later releases, substitute the new version. The workflow runs both test suites,
