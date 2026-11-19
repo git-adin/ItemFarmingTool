@@ -57,6 +57,31 @@ class AddonTests(unittest.TestCase):
             assert(ns.frame:IsShown())
         ''')
 
+    def test_tracker_layers_as_one_opaque_window_and_raises_on_reopen(self):
+        self.check('''
+            local other=CreateFrame('Frame',nil,UIParent)
+            other:SetFrameStrata('MEDIUM')
+            ns.AddItem('2589',20)
+            ns.AddItem('2770',10)
+            assert(ns.frame:GetFrameStrata()=='HIGH' and ns.frame.toplevel)
+            assert(ns.frame.backdropColor[4]==1)
+            for _,f in ipairs(frames) do
+                local parent=f.parent
+                while parent and parent~=ns.frame do parent=parent.parent end
+                if parent==ns.frame and f.kind~='Texture' and f.kind~='FontString' then
+                    assert(f:GetFrameStrata()=='HIGH','Tracker controls left their parent window layer')
+                end
+            end
+            ns.db.locked=true
+            ns.Command('hide')
+            local raised=ns.frame.raises or 0
+            ns.Command('show')
+            assert(ns.frame.raises==raised+1 and ns.db.locked)
+            assert(other:GetFrameStrata()=='MEDIUM' and not other.raises)
+            ns.db.collapsed=true; ns.Render()
+            assert(ns.frame:GetFrameStrata()=='HIGH' and ns.frame.backdropColor[4]==1)
+        ''')
+
     def test_inventory_events_decrease_and_batch(self):
         self.check('''
             bags[0]={{itemID=2589,stackCount=20}}

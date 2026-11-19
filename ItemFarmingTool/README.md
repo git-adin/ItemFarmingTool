@@ -1,4 +1,4 @@
-# ItemFarmingTool 0.2.3
+# ItemFarmingTool 0.2.4
 
 A compact, dependency-free item farming tracker for WoW Forever (Interface 16001).
 
@@ -12,6 +12,10 @@ Drag the title/background to move; **Lock** prevents movement. **- / +** collaps
 or expands the box. The header **x** hides it; `/ift` shows it again. Scroll for
 more than eight items. `/ift reset` restores the default position. Goals, position,
 visibility and lock/collapse settings persist per character.
+
+The tracker has an opaque background and stays above normal addon windows,
+including ProfessionGuide. Clicking it brings it forward among windows on its
+layer; dialogs and tooltips can still appear above it.
 
 Click the footer **Bags + bank / Bags only** button to choose what counts toward
 goals. The choice is saved per character. Bags only uses current carried bags,

@@ -32,7 +32,11 @@ function methods:GetPoint() return unpack(self.point) end
 function methods:ClearAllPoints() self.point = nil end
 function methods:SetText(text) self.text = tostring(text) end
 function methods:GetText() return self.text or "" end
-function methods:Show() self.shown = true end
+function methods:Show()
+    local was = self.shown
+    self.shown = true
+    if not was and self.scripts.OnShow then self.scripts.OnShow(self) end
+end
 function methods:Hide()
     local was = self.shown
     self.shown = false
@@ -54,11 +58,16 @@ function methods:SetBlendMode(value) self.blendMode = value end
 function methods:SetVertexColor(...) self.vertexColor = {...} end
 function methods:SetTextColor(...) self.textColor = {...} end
 function methods:SetClampedToScreen(value) self.clamped = value end
+function methods:SetFrameStrata(value) self.strata = value end
+function methods:GetFrameStrata() return self.strata or (self.parent and self.parent:GetFrameStrata()) or "MEDIUM" end
+function methods:SetToplevel(value) self.toplevel = value end
+function methods:Raise() self.raises = (self.raises or 0) + 1 end
+function methods:SetBackdropColor(...) self.backdropColor = {...} end
 function methods:StartMoving() self.moving = true end
 function methods:StopMovingOrSizing() self.moving = false end
 for _, key in ipairs({"SetAllPoints", "SetTexCoord", "SetColorTexture", "SetJustifyH", "SetJustifyV",
-    "SetAutoFocus", "SetMaxLetters", "SetNumeric", "HighlightText", "SetFrameStrata", "SetMovable",
-    "EnableMouse", "RegisterForDrag", "SetBackdrop", "SetBackdropColor", "SetBackdropBorderColor",
+    "SetAutoFocus", "SetMaxLetters", "SetNumeric", "HighlightText", "SetMovable",
+    "EnableMouse", "RegisterForDrag", "SetBackdrop", "SetBackdropBorderColor",
     "RegisterForClicks", "SetStatusBarTexture", "EnableMouseWheel"}) do methods[key] = function() end end
 function CreateFrame(kind, name, parent, template)
     local frame = setmetatable({kind=kind, name=name, parent=parent, template=template,
