@@ -1,6 +1,7 @@
 -- SPDX-License-Identifier: GPL-3.0-or-later
 local addon, ns = ...
 ns.MAX_ITEMS, ns.MAX_GOAL = 100, 999999
+local publicAPI
 
 local function integer(value, maximum)
     local number = tonumber(value)
@@ -55,6 +56,7 @@ function ns.LoadSettings()
     end
     if type(p) ~= "table" or not points[p.point] or not points[p.relativePoint]
         or not offset(p.x) or not offset(p.y) then ns.db.position = nil end
+    ItemFarmingToolAPI = publicAPI
 end
 
 function ns.Find(id)
@@ -66,6 +68,13 @@ end
 function ns.ItemInfo(item)
     local get = C_Item and C_Item.GetItemInfo or GetItemInfo
     if get then return get(item) end
+end
+
+local function RequestItemData(id)
+    -- Keep the ID even when item data is not cached. The item-info event updates the label.
+    if not ns.ItemInfo(id) and C_Item and C_Item.RequestLoadItemDataByID then
+        C_Item.RequestLoadItemDataByID(id)
+    end
 end
 
 function ns.ResolveItem(text)
@@ -89,9 +98,7 @@ function ns.AddItem(text, goal)
         if #ns.db.items >= ns.MAX_ITEMS then return false, "Track up to 100 items; remove one first." end
         ns.db.items[#ns.db.items + 1] = { id = id, goal = goal }
     end
-    -- Keep the ID even when item data is not cached. The item-info event updates the label.
-    local name = ns.ItemInfo(id)
-    if not name and C_Item and C_Item.RequestLoadItemDataByID then C_Item.RequestLoadItemDataByID(id) end
+    RequestItemData(id)
     ns.Refresh()
     return true
 end
@@ -265,6 +272,79 @@ function ns.RequestRefresh()
     end
     if C_Timer and C_Timer.After then C_Timer.After(0.1, update) else update() end
 end
+
+local function GetTrackedGoals()
+    local goals = {}
+    for _, entry in ipairs(ns.db.items) do
+        goals[entry.id] = entry.goal
+    end
+    return goals
+end
+
+local function ApplyMinimumGoals(goals, showTracker)
+    local isSecret = issecretvalue
+    if (isSecret and isSecret(goals)) or type(goals) ~= "table" then
+        return false, "Provide a list of item goals."
+    end
+    if (isSecret and isSecret(showTracker)) or (showTracker ~= nil and type(showTracker) ~= "boolean") then
+        return false, "The tracker visibility option must be true or false."
+    end
+    local count = #goals
+    for index in pairs(goals) do
+        if type(index) ~= "number" or not integer(index, count) then
+            return false, "Provide a list of item goals with no gaps."
+        end
+    end
+
+    local existing = {}
+    for _, entry in ipairs(ns.db.items) do
+        existing[entry.id] = entry
+    end
+    local pending, order = {}, {}
+    local newCount = 0
+    for index = 1, count do
+        local goal = rawget(goals, index)
+        if (isSecret and isSecret(goal)) or type(goal) ~= "table" then
+            return false, "Each goal must contain an item ID and quantity."
+        end
+        local id, quantity = rawget(goal, "id"), rawget(goal, "quantity")
+        if (isSecret and (isSecret(id) or isSecret(quantity)))
+            or type(id) ~= "number" or not integer(id, 2147483647)
+            or type(quantity) ~= "number" or not integer(quantity, ns.MAX_GOAL) then
+            return false, "Cannot export an unresolved item or invalid quantity."
+        end
+        if not pending[id] then
+            order[#order + 1] = id
+            if not existing[id] then newCount = newCount + 1 end
+        end
+        pending[id] = math.max(pending[id] or 0, quantity)
+    end
+    if #ns.db.items + newCount > ns.MAX_ITEMS then
+        return false, "ItemFarmingTool would exceed " .. ns.MAX_ITEMS .. " items. Remove some goals first."
+    end
+
+    local changed = {}
+    for _, id in ipairs(order) do
+        local entry = existing[id]
+        if not entry then
+            ns.db.items[#ns.db.items + 1] = { id = id, goal = pending[id] }
+            changed[#changed + 1] = id
+        elseif entry.goal < pending[id] then
+            entry.goal = pending[id]
+            changed[#changed + 1] = id
+        end
+    end
+    local reveal = showTracker == true and ns.db.hidden
+    if reveal then ns.db.hidden = false end
+    for _, id in ipairs(changed) do RequestItemData(id) end
+    if reveal or #changed > 0 then ns.Refresh() end
+    return true
+end
+
+publicAPI = {
+    GetTrackedGoals = GetTrackedGoals,
+    ApplyMinimumGoals = ApplyMinimumGoals,
+}
 
 function ns.Command(message)
     local command, rest = (message or ""):match("^%s*(%S*)%s*(.-)%s*$")

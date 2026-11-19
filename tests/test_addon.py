@@ -158,6 +158,58 @@ class AddonTests(unittest.TestCase):
             ns.RemoveItem(50); assert(ns.AddItem('101',10))
         ''')
 
+    def test_public_batch_preserves_higher_goals_and_refreshes_once(self):
+        self.check('''
+            assert(ns.AddItem('2589',40))
+            assert(ns.AddItem('2770',1))
+            assert(ns.AddItem('2996',20))
+            ns.Command('hide')
+            local api = ItemFarmingToolAPI
+            local snapshot = api.GetTrackedGoals()
+            snapshot[2589] = 1
+            assert(api.GetTrackedGoals()[2589] == 40)
+
+            local refreshes = 0
+            local refresh = ns.Refresh
+            ns.Refresh = function()
+                refreshes = refreshes + 1
+                refresh()
+            end
+            local goals = {{id=2589,quantity=10},{id=2770,quantity=5},
+                {id=3371,quantity=3},{id=3371,quantity=7}}
+            assert(api.ApplyMinimumGoals(goals,true))
+            assert(refreshes == 1 and ns.frame:IsShown())
+            assert(ns.Find(2589).goal == 40 and ns.Find(2996).goal == 20)
+            assert(ns.Find(2770).goal == 5 and ns.Find(3371).goal == 7)
+            assert(#ns.db.items == 4)
+            assert(api.ApplyMinimumGoals(goals,true) and refreshes == 1 and #ns.db.items == 4)
+        ''')
+
+    def test_public_batch_rejects_invalid_and_overcapacity_goals_atomically(self):
+        self.check('''
+            for id = 1, 99 do assert(ns.AddItem(tostring(id),10)) end
+            ns.Command('hide')
+            local api = ItemFarmingToolAPI
+            local refreshes = 0
+            ns.Refresh = function() refreshes = refreshes + 1 end
+            local raiseExisting = {id=1,quantity=20}
+            local addNew = {id=100,quantity=20}
+            local ok, reason = api.ApplyMinimumGoals({raiseExisting,addNew,{id=101,quantity=20}},true)
+            assert(not ok and reason:find('100 items'))
+            for _, invalid in ipairs({{quantity=2},{id=2147483648,quantity=2},
+                    {id=100,quantity=1000000},{id=100,quantity=2.5},{id=100,quantity='2'}}) do
+                assert(not api.ApplyMinimumGoals({raiseExisting,addNew,invalid},true))
+            end
+            assert(not api.ApplyMinimumGoals({[1]=raiseExisting,[3]=addNew},true))
+            assert(not api.ApplyMinimumGoals({raiseExisting,extra=addNew},true))
+            assert(not api.ApplyMinimumGoals({raiseExisting,addNew},'show'))
+            assert(ns.Find(1).goal == 10 and #ns.db.items == 99)
+            assert(refreshes == 0 and not ns.frame:IsShown())
+            assert(api.ApplyMinimumGoals({raiseExisting,addNew,addNew}))
+            assert(refreshes == 1 and ns.Find(1).goal == 20 and #ns.db.items == 100)
+            assert(not ns.frame:IsShown())
+        ''')
+
     def test_commands_and_visibility(self):
         self.check('''
             assert(SLASH_ITEMFARMINGTOOL1=='/ift')

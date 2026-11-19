@@ -114,6 +114,25 @@ are excluded from Git. Runtime API signatures are checked against the
 [Forever bank UI source](https://github.com/Gethe/wow-ui-source/blob/70ef1b2fd78061a73f886c4a1e79dc5b5cff6d5e/Interface/AddOns/Blizzard_UIPanels_Game/Camelot/BankFrame.lua)
 and the installed Forever addons.
 
+### Add-on integration API
+
+`ItemFarmingToolAPI` becomes available after ItemFarmingTool loads its character
+settings. Declare ItemFarmingTool as an optional dependency and check for the
+methods you use.
+
+- `ItemFarmingToolAPI.GetTrackedGoals()` returns a copy of the current goals,
+  keyed by numeric item ID.
+- `ItemFarmingToolAPI.ApplyMinimumGoals(goals, showTracker)` takes a list of
+  `{ id = itemID, quantity = minimum }` entries. Item IDs and quantities must be
+  positive whole numbers. Duplicate item IDs use the highest minimum. Passing
+  `true` for `showTracker` opens the tracker after a successful export.
+  It returns `true`, or `false, reason` when the batch is invalid or exceeds
+  capacity. A rejected batch changes no goals. Existing higher goals and
+  unrelated items are preserved.
+
+Publish the ItemFarmingTool build that provides this API before publishing a
+ProfessionGuide release that uses it.
+
 Follow the same release process as QuestLite: update `## Version:` in
 `ItemFarmingTool/ItemFarmingTool.toc`, the addon README heading, and
 `.github/RELEASE_NOTES.md`. Commit and push, then tag that commit:
