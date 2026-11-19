@@ -3,7 +3,7 @@
 ## Category: Inventory
 ## Notes: A compact item farming tracker with bags and cached bank counts for WoW Forever.
 ## Author: git-adin
-## Version: 0.2.4
+## Version: 0.2.5
 ## SavedVariablesPerCharacter: ItemFarmingToolDB
 ## X-License: GPL-3.0-or-later
 

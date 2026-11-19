@@ -106,7 +106,7 @@ Python 3 is needed only for development:
 python -m pip install --target .tools -r tests/requirements.txt
 python tests/test_addon.py
 python tests/test_package.py
-python tools/package.py --tag v0.2.3
+python tools/package.py --tag v0.2.5
 ```
 
 The output contains only the installable addon folder. `dist/` and test dependencies
@@ -114,13 +114,32 @@ are excluded from Git. Runtime API signatures are checked against the
 [Forever bank UI source](https://github.com/Gethe/wow-ui-source/blob/70ef1b2fd78061a73f886c4a1e79dc5b5cff6d5e/Interface/AddOns/Blizzard_UIPanels_Game/Camelot/BankFrame.lua)
 and the installed Forever addons.
 
+### Add-on integration API
+
+`ItemFarmingToolAPI` is available in version 0.2.5 and later after ItemFarmingTool
+loads its character settings. Declare ItemFarmingTool as an optional dependency
+and check for the methods you use.
+
+- `ItemFarmingToolAPI.GetTrackedGoals()` returns a copy of the current goals,
+  keyed by numeric item ID.
+- `ItemFarmingToolAPI.ApplyMinimumGoals(goals, showTracker)` takes a list of
+  `{ id = itemID, quantity = minimum }` entries. Item IDs and quantities must be
+  positive whole numbers. Duplicate item IDs use the highest minimum. Passing
+  `true` for `showTracker` opens the tracker after a successful export.
+  It returns `true`, or `false, reason` when the batch is invalid or exceeds
+  capacity. A rejected batch changes no goals. Existing higher goals and
+  unrelated items are preserved.
+
+Publish the ItemFarmingTool build that provides this API before publishing a
+ProfessionGuide release that uses it.
+
 Follow the same release process as QuestLite: update `## Version:` in
 `ItemFarmingTool/ItemFarmingTool.toc`, the addon README heading, and
 `.github/RELEASE_NOTES.md`. Commit and push, then tag that commit:
 
 ```powershell
-git tag v0.2.3
-git push origin v0.2.3
+git tag v0.2.5
+git push origin v0.2.5
 ```
 
 For later releases, substitute the new version. The workflow runs both test suites,

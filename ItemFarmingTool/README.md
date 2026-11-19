@@ -1,4 +1,4 @@
-# ItemFarmingTool 0.2.4
+# ItemFarmingTool 0.2.5
 
 A compact, dependency-free item farming tracker for WoW Forever (Interface 16001).
 
@@ -43,8 +43,8 @@ Commands: `/ift add <ID, link or cached exact name> <goal>`, `/ift remove <item>
 
 Install this folder under `_forever_/Interface/AddOns/ItemFarmingTool/` with the
 TOC directly inside. Enable it in the AddOns list. No dependencies are required.
-Offline regression-tested; the live Forever appearance and interactions still
-need an in-game check.
+Verified with ProfessionGuide in Forever. Exporting a route kept existing goals,
+added new goals, and created no duplicates when repeated.
 
 [Source, releases and full instructions](https://github.com/git-adin/ItemFarmingTool).
 GPL-3.0-or-later; see LICENSE.
