@@ -106,7 +106,7 @@ Python 3 is needed only for development:
 python -m pip install --target .tools -r tests/requirements.txt
 python tests/test_addon.py
 python tests/test_package.py
-python tools/package.py --tag v0.2.3
+python tools/package.py --tag v0.2.5
 ```
 
 The output contains only the installable addon folder. `dist/` and test dependencies
@@ -116,9 +116,9 @@ and the installed Forever addons.
 
 ### Add-on integration API
 
-`ItemFarmingToolAPI` becomes available after ItemFarmingTool loads its character
-settings. Declare ItemFarmingTool as an optional dependency and check for the
-methods you use.
+`ItemFarmingToolAPI` is available in version 0.2.5 and later after ItemFarmingTool
+loads its character settings. Declare ItemFarmingTool as an optional dependency
+and check for the methods you use.
 
 - `ItemFarmingToolAPI.GetTrackedGoals()` returns a copy of the current goals,
   keyed by numeric item ID.
@@ -138,8 +138,8 @@ Follow the same release process as QuestLite: update `## Version:` in
 `.github/RELEASE_NOTES.md`. Commit and push, then tag that commit:
 
 ```powershell
-git tag v0.2.3
-git push origin v0.2.3
+git tag v0.2.5
+git push origin v0.2.5
 ```
 
 For later releases, substitute the new version. The workflow runs both test suites,

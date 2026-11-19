@@ -1,15 +1,9 @@
-## ItemFarmingTool 0.2.4
+## ItemFarmingTool 0.2.5
 
-Fix tracker overlap with other addon windows, including ProfessionGuide.
+- ProfessionGuide can export a route's material goals through the new ItemFarmingTool API.
+- Exports add new goals, preserve unrelated items and higher quantities, and leave the tracker as it was if the full batch exceeds capacity.
+- The tracker keeps its opaque background and layers above ordinary add-on windows.
 
-- Keep the tracker background and controls together above ordinary addon panels.
-- Use a fully opaque background so underlying text cannot show through.
-- Bring the tracker forward when reopened and support native click-to-front behavior.
-- Keep dialogs and tooltips above the tracker.
+Install ItemFarmingTool 0.2.5 before updating ProfessionGuide if you use farming-goal export. Replace the add-on folder and reload WoW. Existing goals, bank counts, and window settings carry over.
 
-Use `/reload` after updating. Goals, saved bank counts and window settings are preserved.
-
-Validation: offline Lua UI behavior tests and installable-package checks passed.
-Forever visual smoke test pending: open ProfessionGuide and the profession panel,
-overlap the tracker with both, click its rows and controls, hide/show it, collapse
-and expand it, and verify that windows no longer draw through the tracker.
+The paired export was verified in Forever. Repeating the same export created no duplicates.
